@@ -18,10 +18,21 @@
 		<java.version>21</java.version>
 	</properties>
 	<dependencies>
-		<!-- Spring Data JPA + Hibernate ORM 7 (Jakarta Persistence 3.2) -->
+		<!-- DataSource (pool HikariCP) + spring-jdbc, configurado desde spring.datasource.* en application.properties.
+		     NO se usa spring-boot-starter-data-jpa: en esta rama los repositorios se escriben a mano contra la Session de Hibernate. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa</artifactId>
+			<artifactId>spring-boot-starter-jdbc</artifactId>
+		</dependency>
+		<!-- Hibernate ORM 7 "pelado": SessionFactory, Session, HQL (version administrada por Spring Boot) -->
+		<dependency>
+			<groupId>org.hibernate.orm</groupId>
+			<artifactId>hibernate-core</artifactId>
+		</dependency>
+		<!-- Integracion Spring <-> Hibernate: LocalSessionFactoryBean y HibernateTransactionManager -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-orm</artifactId>
 		</dependency>
 
 		<!-- Driver JDBC de MySQL (version administrada por Spring Boot) -->

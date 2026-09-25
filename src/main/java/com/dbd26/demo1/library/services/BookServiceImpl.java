@@ -7,7 +7,6 @@ import com.dbd26.demo1.library.model.DigitalBook;
 import com.dbd26.demo1.library.model.PhysicalBook;
 import com.dbd26.demo1.library.repositories.AuthorRepository;
 import com.dbd26.demo1.library.repositories.BookRepository;
-import com.dbd26.demo1.library.repositories.DigitalBookRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,9 +19,6 @@ public class BookServiceImpl implements BookService {
 
     @Autowired
     private BookRepository bookRepository;
-
-    @Autowired
-    private DigitalBookRepository digitalBookRepository;
 
     @Autowired
     private AuthorRepository authorRepository;
@@ -44,7 +40,8 @@ public class BookServiceImpl implements BookService {
         book.setAuthor(author);
         // Se mantiene coherente el lado inverso de la relacion en memoria (la FK la escribe el lado Book).
         author.getBooks().add(book);
-        return this.bookRepository.save(book);
+        this.bookRepository.save(book);
+        return book;
     }
 
     @Override
@@ -68,13 +65,13 @@ public class BookServiceImpl implements BookService {
     @Override
     @Transactional(readOnly = true)
     public List<DigitalBook> findAllDigitalBook() {
-        return this.digitalBookRepository.findAll();
+        return this.bookRepository.findAllDigitalBooks();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<DigitalBook> findDigitalBooksByFormat(String format) {
-        return this.digitalBookRepository.findByFormatIgnoreCase(format);
+        return this.bookRepository.findDigitalBooksByFormat(format);
     }
 
     @Override

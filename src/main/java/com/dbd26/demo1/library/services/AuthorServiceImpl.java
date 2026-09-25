@@ -37,8 +37,8 @@ public class AuthorServiceImpl implements AuthorService {
             Author author = authorOptional.get();
             author.setFullname(fullname);
             author.setDateOfBirth(dateOfBirth);
-            // No hace falta llamar a save(): la entidad esta "managed" y Hibernate detecta los cambios
-            // (dirty checking) y genera el UPDATE al terminar la transaccion.
+            // No hace falta llamar al repositorio: la entidad esta "managed" dentro de la Session y Hibernate
+            // detecta los cambios (dirty checking) y genera el UPDATE al hacer commit.
             return author;
         } else return null;
     }
@@ -49,9 +49,9 @@ public class AuthorServiceImpl implements AuthorService {
         if (author.getId() == null || !this.authorRepository.existsById(author.getId())) {
             throw new LibraryException("No existe el autor con id " + author.getId());
         }
-        // save() sobre una entidad "detached" (viene del JSON) hace un merge: copia el estado a la entidad
-        // administrada. Si la "version" recibida es vieja, falla con OptimisticLockException.
-        return this.authorRepository.save(author);
+        // La entidad recibida esta "detached" (fue cargada en otra transaccion): merge() copia su estado a la
+        // instancia managed. Si la "version" recibida es vieja, falla por bloqueo optimista.
+        return this.authorRepository.update(author);
     }
 
     @Override
@@ -103,7 +103,7 @@ public class AuthorServiceImpl implements AuthorService {
         List<Author> authors = this.authorRepository.findByMoreBooks();
         if (!authors.isEmpty()) {
             Author a = authors.get(0);
-            // Fuerza la carga LAZY de la coleccion mientras la transaccion sigue abierta.
+            // Fuerza la carga LAZY de la coleccion mientras la Session sigue abierta.
             a.getBooks().size();
             return a;
         }
