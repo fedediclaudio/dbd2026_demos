@@ -1,45 +1,50 @@
 package com.dbd26.demo1.library.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.DocumentReference;
+
 import java.util.List;
 
 /*
- Herencia con estrategia SINGLE_TABLE: todas las subclases (PhysicalBook, DigitalBook) se guardan en la
- misma tabla "book" y la columna "type" (discriminador) indica de que subclase es cada fila.
- Las columnas propias de cada subclase (weight/location, format/size) quedan en NULL en las filas de la otra.
+ Herencia en MongoDB: no hay tablas, asi que no hay SINGLE_TABLE ni JOINED. Todas las subclases se guardan en la
+ misma coleccion "book" y Spring Data agrega a cada documento el campo "_class" con el alias de la subclase
+ ("Physical" o "Digital", ver @TypeAlias en PhysicalBook y DigitalBook). Es el equivalente de la columna
+ discriminadora: al leer, Spring Data mira "_class" para saber que subclase instanciar.
+ Cada documento tiene solo los campos de su subclase: un libro fisico no tiene "format" ni "size" en null,
+ directamente no tiene esos campos.
  */
-@Entity
-@Table(name = "book")
-@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
-@DiscriminatorColumn(name = "type", discriminatorType = DiscriminatorType.STRING)
+@Document(collection = "book")
 public abstract class Book {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id_book")
-    private Long id;
+    private String id;
 
-    @Column(unique = true, nullable = false, length = 13)
+    // Indice unico sobre isbn: es la unica "restriccion" que MongoDB puede imponer (ademas de la clave).
+    // Se crea al arrancar gracias a spring.data.mongodb.auto-index-creation=true.
+    @Indexed(unique = true)
     private String isbn;
 
-    @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false)
     private int year;
 
-    @Column(length = 255)
     private String comments;
 
     /*
-     Lado propietario de la relacion N:1: esta clase tiene la FK "id_author".
-     FetchType.EAGER: al cargar un libro se trae siempre su autor (join en la misma consulta).
+     Lado propietario de la relacion: el documento guarda en el campo "author" solo el _id del autor
+     (equivale a la FK id_author). Al leer un libro, Spring Data hace una segunda consulta para traer el autor.
+     Alternativa tipica en MongoDB: embeber una copia del autor dentro del libro (desnormalizar), que evita la
+     segunda consulta pero duplica datos.
+     MongoDB NO valida la referencia: nada impide borrar un autor que tiene libros (no hay claves foraneas).
      */
-    @ManyToOne(fetch = FetchType.EAGER, cascade = {})
-    @JoinColumn(name = "id_author", nullable = false)
+    @DocumentReference
+    @Indexed
     private Author author;
 
-    @Transient // Indica que dicho atributo no se mapea a la base de datos.
+    @Transient // Indica que dicho atributo no se guarda en el documento.
     private Editorial editorial;
 
     @Transient
@@ -56,7 +61,7 @@ public abstract class Book {
         this.author = author;
     }
 
-    public Book(Long id, String isbn, String title, int year, String comments, Author author) {
+    public Book(String id, String isbn, String title, int year, String comments, Author author) {
         this.id = id;
         this.isbn = isbn;
         this.title = title;
@@ -65,11 +70,11 @@ public abstract class Book {
         this.author = author;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 

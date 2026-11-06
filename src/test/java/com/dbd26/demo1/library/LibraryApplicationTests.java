@@ -7,11 +7,13 @@ import com.dbd26.demo1.library.model.DigitalBook;
 import com.dbd26.demo1.library.model.PhysicalBook;
 import com.dbd26.demo1.library.services.AuthorService;
 import com.dbd26.demo1.library.services.BookService;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.annotation.Rollback;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -20,15 +22,16 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 /*
- Todos los tests corren contra la misma base y, por @Rollback(false), los datos quedan persistidos
- (util para inspeccionarlos en MySQL despues de correrlos). Por eso:
-  - las comprobaciones de cantidades son relativas (se cuenta antes y despues), nunca absolutas;
-  - cada test usa ISBN propios, para no chocar con la restriccion "unique";
-  - las fechas se calculan a partir de LocalDate.now(), para que no dejen de valer con el paso del tiempo.
+ Misma suite que las ramas jpa_repositories e hibernate, con las diferencias que impone MongoDB:
+  - no hay transacciones ni @Rollback: cada operacion impacta en la base al instante y los datos quedan
+    persistidos (util para inspeccionarlos con mongosh despues de correrlos);
+  - no hay "ddl-auto=create" que recree el esquema al arrancar: la base se vacia a mano antes de la suite;
+  - no hay contexto de persistencia: dos lecturas del mismo documento devuelven dos objetos distintos.
+ Por eso las comprobaciones de cantidades son relativas, cada test usa ISBN propios y las fechas se calculan
+ a partir de LocalDate.now().
  */
 @SpringBootTest
-@Transactional
-@Rollback(false)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LibraryApplicationTests {
 
 	@Autowired
@@ -36,6 +39,18 @@ class LibraryApplicationTests {
 
 	@Autowired
 	private BookService bookService;
+
+	@Autowired
+	private MongoTemplate mongoTemplate;
+
+	// Equivalente al hbm2ddl.auto=create de Hibernate: se parte de una base vacia en cada corrida.
+	// Se borran los documentos, no las colecciones: los indices (por ejemplo el unico de isbn) los crea
+	// Spring Data al arrancar y un drop de la coleccion se los llevaria.
+	@BeforeAll
+	void cleanDatabase() {
+		this.mongoTemplate.getCollectionNames()
+				.forEach(collection -> this.mongoTemplate.remove(new Query(), collection));
+	}
 
 	@Test
 	void contextLoads() {
@@ -141,7 +156,7 @@ class LibraryApplicationTests {
 		assertEquals(2, bookList.size());
 	}
 
-	// ---------- Consultas JPQL agregadas ----------
+	// ---------- Consultas (filtros JSON y agregaciones) ----------
 
 	@Test
 	void getAuthorWithBooksUsesJoinFetch() throws LibraryException {
@@ -151,7 +166,7 @@ class LibraryApplicationTests {
 		Optional<Author> found = this.authorService.getByIdWithBooks(author.getId());
 		assertTrue(found.isPresent());
 		assertEquals(2, found.get().getBooks().size());
-		assertTrue(this.authorService.getByIdWithBooks(-1L).isEmpty());
+		assertTrue(this.authorService.getByIdWithBooks("000000000000000000000000").isEmpty());
 	}
 
 	@Test
@@ -167,7 +182,7 @@ class LibraryApplicationTests {
 		Author withBooks = this.authorService.createAuthor("Con libros", LocalDate.of(1950, 1, 1));
 		Author withoutBooks = this.authorService.createAuthor("Sin libros", LocalDate.of(1950, 1, 1));
 		bookService.createDigitalBook("9780000000051", "Un libro", 2000, null, "PDF", 1.0f, withBooks);
-		List<Long> ids = this.authorService.getAuthorsWithoutBooks().stream().map(Author::getId).toList();
+		List<String> ids = this.authorService.getAuthorsWithoutBooks().stream().map(Author::getId).toList();
 		assertTrue(ids.contains(withoutBooks.getId()));
 		assertFalse(ids.contains(withBooks.getId()));
 	}
@@ -262,7 +277,8 @@ class LibraryApplicationTests {
 		assertTrue(this.bookService.deleteByIsbn("9780000000141"));
 		assertTrue(this.bookService.findByIsbn("9780000000141").isEmpty());
 		assertFalse(this.bookService.deleteByIsbn("9780000000141"));
-		assertTrue(author.getBooks().isEmpty());
+		// Sin contexto de persistencia, el objeto "author" del test no se entera: hay que volver a leerlo.
+		assertTrue(this.authorService.getByIdWithBooks(author.getId()).orElseThrow().getBooks().isEmpty());
 	}
 
 }

@@ -1,41 +1,53 @@
 package com.dbd26.demo1.library.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.ReadOnlyProperty;
+import org.springframework.data.annotation.Version;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.DocumentReference;
+import org.springframework.data.mongodb.core.mapping.Field;
+
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-@Entity
-@Table(name = "author")
+/*
+ @Document: la clase se guarda como documentos BSON en la coleccion "author" (equivale a @Entity + @Table).
+ No hay esquema: cada documento tiene los campos que tenga el objeto al guardarlo.
+ */
+@Document(collection = "author")
 public class Author {
 
+    /*
+     Clave del documento (campo "_id"). Si se deja en null, MongoDB genera un ObjectId (12 bytes: fecha, maquina,
+     contador), que Spring Data representa como String hexadecimal de 24 caracteres.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id_author")
-    private Long id;
+    private String id;
 
-    @Column(length = 100, nullable = false)
+    @Field("fullname")
     private String fullname;
 
-    @Column(name = "date_of_birth")
+    @Field("date_of_birth")
     private LocalDate dateOfBirth;
 
     /*
-     Lado inverso de la relacion 1:N (mappedBy): la FK "id_author" vive en la tabla book, aca no hay columna.
-     FetchType.LAZY: los libros se consultan recien cuando se accede a la coleccion
-     (o de antemano con "join fetch", ver AuthorRepository.findByIdWithBooks).
-     Acceder a la coleccion fuera de una transaccion lanza LazyInitializationException.
+     Lado "inverso" de la relacion, equivalente al mappedBy de JPA: esta lista NO se guarda en el documento
+     (@ReadOnlyProperty). Al leer un autor, Spring Data la resuelve con la consulta del "lookup":
+     busca en la coleccion book los documentos cuyo campo "author" sea el id de este autor.
+     lazy = true: esa consulta se ejecuta recien cuando se accede a la lista (misma idea que FetchType.LAZY).
      */
-    @OneToMany(mappedBy = "author", fetch = FetchType.LAZY)
+    @ReadOnlyProperty
+    @DocumentReference(lookup = "{ 'author': ?#{#self._id} }", lazy = true)
     private List<Book> books = new ArrayList<>();
 
     /*
-     Bloqueo optimista: Hibernate incrementa "version" en cada UPDATE y falla (OptimisticLockException)
-     si alguien modifico la fila entre que se leyo y se escribio.
+     Bloqueo optimista: Spring Data incrementa "version" en cada save() y falla (OptimisticLockingFailureException)
+     si el documento fue modificado entre la lectura y la escritura. Debe ser un tipo envoltorio (Integer, no int):
+     Spring Data usa "version == null" para saber si el objeto es nuevo (insert) o existente (update).
      */
     @Version
-    @Column(name = "version")
-    private int version;
+    private Integer version;
 
     public Author() {
     }
@@ -45,17 +57,17 @@ public class Author {
         this.dateOfBirth = dateOfBirth;
     }
 
-    public Author(Long id, String fullname, LocalDate dateOfBirth) {
+    public Author(String id, String fullname, LocalDate dateOfBirth) {
         this.id = id;
         this.fullname = fullname;
         this.dateOfBirth = dateOfBirth;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
@@ -83,11 +95,11 @@ public class Author {
         this.books = books;
     }
 
-    public int getVersion() {
+    public Integer getVersion() {
         return version;
     }
 
-    public void setVersion(int version) {
+    public void setVersion(Integer version) {
         this.version = version;
     }
 }

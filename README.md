@@ -1,15 +1,18 @@
-# demo_library_2026
+# demo_library_2026 · rama `mongo`
 Demo de muestra para el curso Diseño de Bases de Datos (DBD) 2026 - UNLP.
 
-Implementación de referencia de algunas capacidades de Hibernate / JPA sobre Spring Boot:
-entidades, herencia (`SINGLE_TABLE`), relaciones `@OneToMany` / `@ManyToOne`, carga `LAZY` / `EAGER`,
-bloqueo optimista (`@Version`), repositorios Spring Data, consultas derivadas, JPQL y SQL nativo.
+La misma biblioteca de las ramas `jpa_repositories` y `hibernate`, pero sobre **MongoDB con Spring Data MongoDB**:
+documentos en lugar de tablas, filtros JSON y pipelines de agregación en lugar de SQL/JPQL, y sin ORM.
 
-La demo se ejecuta a través de los tests: con `spring.jpa.show-sql=true` se ve en la consola cada SQL
-que genera Hibernate. No hay capa web ni API REST, a propósito, para mantener el foco en el mapeo y las consultas.
+Las tres ramas comparten el modelo de dominio, las interfaces de servicio y la suite de tests, con las pocas
+diferencias que impone una base de documentos (ver más abajo). Sirven para comparar qué cambia al pasar de una
+base relacional a una documental.
+
+La demo se ejecuta a través de los tests: con el log de `MongoTemplate` en `DEBUG` se ve en la consola cada
+operación que se envía a MongoDB. No hay capa web ni API REST.
 
 Las clases `Loan`, `Partner`, `Genre` y `Editorial` están sin mapear a propósito: quedan como actividad
-para los alumnos.
+para los alumnos. En MongoDB es un buen ejercicio decidir qué embeber y qué referenciar.
 
 ## Stack
 
@@ -17,70 +20,81 @@ para los alumnos.
 |-----------------------|---------|
 | Java                  | 21 (LTS) |
 | Spring Boot           | 4.1.1 |
-| Spring Data JPA       | 2026.0 |
-| Hibernate ORM         | 7.4 |
-| Jakarta Persistence   | 3.2 |
-| MySQL Connector/J     | 9.7 |
+| Spring Data MongoDB   | 2026.0 |
+| MongoDB Java Driver   | 5.8 |
+| MongoDB               | 8.x (vale 4.4 o superior) |
 | JUnit Jupiter         | 6.0 |
 
 ## Requisitos
 
 - JDK 21 o superior.
-- MySQL 8.0 o superior, con una base de datos `library_bd` y usuario `root` / `root`
-  (ver `src/main/resources/application.properties`).
+- MongoDB accesible en `localhost:27017`, sin autenticación (ver `src/main/resources/application.properties`;
+  en Boot 4 la propiedad es `spring.mongodb.uri`, ya no `spring.data.mongodb.uri`).
+  Con Docker:
+
+  ```bash
+  docker run -d --name mongo-tp -p 27017:27017 mongo:8
+  ```
+
 - No hace falta instalar Maven: el proyecto incluye el Maven Wrapper (`./mvnw` / `mvnw.cmd`).
 
 ## Ejecutar los tests
-
-Contra MySQL (comportamiento por defecto). Los tests de `LibraryApplicationTests` usan `@Rollback(false)`,
-así que los datos quedan persistidos y se pueden inspeccionar en la base después de correrlos:
 
 ```bash
 ./mvnw test
 ```
 
-Contra una base H2 en memoria, sin necesidad de tener MySQL levantado:
+Los datos quedan persistidos en la base `library_bd` (la suite la vacía al empezar, no al terminar).
+Para mirarlos:
 
 ```bash
-./mvnw test -Dspring.profiles.active=h2
+mongosh library_bd
+db.book.find().pretty()
+db.author.find().pretty()
 ```
 
 Un test puntual:
 
 ```bash
-./mvnw test -Dtest='LibraryApplicationTests#getAuthorWithBooksUsesJoinFetch'
+./mvnw test -Dtest='LibraryApplicationTests#findBooksByTypeIsPolymorphic'
 ```
 
-## Estructura
+## Cómo se modeló
 
-| Paquete | Contenido |
+| Concepto relacional | En esta rama |
 |---|---|
-| `model` | Entidades `Author`, `Book` (abstracta), `PhysicalBook`, `DigitalBook`. Las demás clases son POJOs sin mapear |
-| `dto` | `AuthorBookCount`, `record` usado como resultado de una consulta JPQL con `select new` |
-| `repositories` | Interfaces Spring Data con consultas derivadas, JPQL, nativas y `@Modifying` |
-| `services` | Lógica de negocio y límites transaccionales (`@Transactional`) |
+| Tabla `author` / `book` | Colecciones `author` / `book` (`@Document`) |
+| Clave primaria autoincremental | `_id` de tipo `ObjectId`, generado por MongoDB, como `String` en Java |
+| Herencia `SINGLE_TABLE` + discriminador `type` | Una sola colección `book` + campo `_class` con `@TypeAlias("Physical")` / `("Digital")` |
+| `@ManyToOne` con FK `id_author` | `@DocumentReference` en `Book.author`: guarda solo el `_id` del autor |
+| `@OneToMany(mappedBy)` LAZY | `@ReadOnlyProperty @DocumentReference(lookup = …, lazy = true)` en `Author.books`: no se guarda, se consulta al acceder |
+| Restricción `unique` sobre `isbn` | Índice único `@Indexed(unique = true)` |
+| Clave foránea | **No existe.** El servicio impide borrar un autor con libros |
+| `@Version` (bloqueo optimista) | Igual, con `Integer` en lugar de `int` |
+| `@Transactional` | Se quita: atomicidad por documento. Transacciones multi-documento requieren replica set |
+| `ddl-auto=create` | No hay esquema. La suite vacía la base en `@BeforeAll` |
 
 ## Consultas de ejemplo en los repositorios
 
 | Repositorio | Método | Qué muestra |
 |---|---|---|
-| `AuthorRepository` | `findByDateOfBirthGreaterThan`, `findByFullnameContainingIgnoreCase` | Consultas derivadas del nombre del método |
-| `AuthorRepository` | `findByMoreBooks` | `join` + `group by` + `order by count()` |
-| `AuthorRepository` | `findByIdWithBooks` | `join fetch` para evitar el problema N+1 |
-| `AuthorRepository` | `findWithoutBooks` | Predicado `is empty` sobre una colección |
-| `AuthorRepository` | `countBooksByAuthor` | Proyección a un DTO (`record`) con `select new ...` |
-| `BookRepository` | `findByYearBetween` | Parámetros nombrados y `between` |
-| `BookRepository` | `searchByTitle` | `like` + `concat` + `lower` |
-| `BookRepository` | `findByAuthorFullname` | Navegación por asociación (`b.author.fullname`) |
-| `BookRepository` | `findByType` | Consulta polimórfica con `type(b)` sobre la jerarquía |
-| `BookRepository` | `averageYearByAuthor` | Función de agregación escalar (`avg`) |
-| `BookRepository` | `updateComments` | Actualización masiva con `@Modifying` |
-| `BookRepository` | `findByIsbnNative` | SQL nativo (`nativeQuery = true`) |
-| `DigitalBookRepository` | `findByFormatIgnoreCase` | Repositorio sobre una subclase (filtra por discriminador) |
+| `AuthorRepository` | `findByDateOfBirthGreaterThan`, `findByFullnameContainingIgnoreCase` | Consultas derivadas, traducidas a `$gt` y a expresión regular |
+| `AuthorRepository` | `findByMoreBooks` | `@Aggregation` con `$lookup` (el "join" de MongoDB), `$addFields`, `$match`, `$sort` |
+| `AuthorRepository` | `findWithoutBooks` | `$lookup` + `$match` con `$size: 0` |
+| `AuthorRepository` | `countBooksByAuthor` | `$project` que arma un DTO (`record`) |
+| `BookRepository` | `findByIsbnNative` | `@Query` con el filtro JSON tal cual se escribe en `mongosh` |
+| `BookRepository` | `findByYearBetween` | `$gte` / `$lte` con orden |
+| `BookRepository` | `searchByTitle` | `$regex` con `$options: 'i'` |
+| `BookRepository` | `findByTypeAlias` | Consulta polimórfica por `_class` |
+| `BookRepository` | `findByAuthor` | Consulta derivada sobre una referencia |
+| `BookRepository` | `findByAuthorFullname` | `$lookup` hacia `author` para filtrar por un campo del autor |
+| `BookRepository` | `averageYearByAuthor` | `$group` + `$avg`, resultado escalar |
+| `BookRepositoryImpl` | `updateComments` | Fragmento a mano con `MongoTemplate`: `updateFirst` + `$set` |
+| `DigitalBookRepository` | `findAllDigital`, `findByFormatIgnoreCase` | Repositorio de subclase: el filtro por `_class` hay que escribirlo |
 
 ## Tests
 
 | Clase | Qué muestra |
 |---|---|
-| `LibraryApplicationTests` | Alta, consulta, modificación y baja a través de los servicios, y cada una de las consultas de la tabla anterior. Toda la clase corre en una transacción por test |
-| `LibraryConcurrencyTests` | Sin `@Transactional`: bloqueo optimista con `@Version` entre dos transacciones, y violación de FK al borrar un autor con libros |
+| `LibraryApplicationTests` | Misma suite que las otras ramas. Diferencias: sin `@Transactional`, vacía la base al inicio, y donde JPA garantizaba identidad de objetos acá hay que volver a leer |
+| `LibraryConcurrencyTests` | Bloqueo optimista con `@Version` (funciona igual) y la ausencia de claves foráneas: es el servicio quien rechaza borrar un autor con libros |

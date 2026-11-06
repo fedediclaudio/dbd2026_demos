@@ -1,15 +1,15 @@
 package com.dbd26.demo1.library.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.TypeAlias;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-@Entity
-@DiscriminatorValue("Digital")
-public class DigitalBook extends Book{
+@Document(collection = "book")
+@TypeAlias("Digital")
+public class DigitalBook extends Book {
 
-    @Column
-    String format;
-    @Column
-    float size;
+    private String format;
+
+    private float size;
 
     public DigitalBook() {
     }
@@ -20,7 +20,7 @@ public class DigitalBook extends Book{
         this.size = size;
     }
 
-    public DigitalBook(Long id, String isbn, String title, int year, String comments, String format, float size, Author author) {
+    public DigitalBook(String id, String isbn, String title, int year, String comments, String format, float size, Author author) {
         super(id, isbn, title, year, comments, author);
         this.format = format;
         this.size = size;

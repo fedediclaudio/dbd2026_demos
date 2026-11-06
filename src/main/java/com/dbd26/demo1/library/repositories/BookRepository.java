@@ -1,54 +1,61 @@
 package com.dbd26.demo1.library.repositories;
 
+import com.dbd26.demo1.library.model.Author;
 import com.dbd26.demo1.library.model.Book;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.bson.types.ObjectId;
+import org.springframework.data.mongodb.repository.Aggregation;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
+/*
+ Ademas de los metodos generados por Spring Data, este repositorio extiende BookRepositoryCustom: un "fragmento"
+ con una implementacion escrita a mano sobre MongoTemplate (ver BookRepositoryImpl).
+ */
 @Repository
-public interface BookRepository extends JpaRepository<Book, Long> {
+public interface BookRepository extends MongoRepository<Book, String>, BookRepositoryCustom {
 
-    // Consultas derivadas del nombre del metodo.
+    // Consulta derivada: { isbn: ?0 }
     Optional<Book> findByIsbn(String isbn);
 
-    List<Book> findByAuthorId(Long id);
+    // Consulta derivada sobre la referencia: Spring Data compara el campo "author" con el _id del autor recibido.
+    List<Book> findByAuthor(Author author);
 
-    // JPQL con parametros nombrados (:from, :to) y "between".
-    @Query("select b from Book b where b.year between :from and :to order by b.year, b.title")
-    List<Book> findByYearBetween(@Param("from") int from, @Param("to") int to);
+    // @Query con el filtro JSON "nativo" de MongoDB: es lo mismo que se escribiria en mongosh en db.book.find(...).
+    // Equivale a la consulta SQL nativa de las otras ramas.
+    @Query("{ 'isbn': ?0 }")
+    Optional<Book> findByIsbnNative(String isbn);
 
-    // Busqueda parcial con "like" + "concat", y "join fetch" del autor (aunque es EAGER, asi queda en la misma consulta).
-    @Query("select b from Book b join fetch b.author where lower(b.title) like lower(concat('%', :text, '%'))")
-    List<Book> searchByTitle(@Param("text") String text);
+    // Rango con $gte / $lte y orden. (El "Between" derivado de Spring Data MongoDB es exclusivo, por eso @Query.)
+    @Query(value = "{ 'year': { $gte: ?0, $lte: ?1 } }", sort = "{ 'year': 1, 'title': 1 }")
+    List<Book> findByYearBetween(int from, int to);
 
-    // Navegacion por asociacion (b.author.fullname): Hibernate genera el join con la tabla author automaticamente.
-    @Query("select b from Book b where b.author.fullname = :fullname")
-    List<Book> findByAuthorFullname(@Param("fullname") String fullname);
+    // Busqueda parcial con expresion regular insensible a mayusculas (equivale a like + lower).
+    @Query("{ 'title': { $regex: ?0, $options: 'i' } }")
+    List<Book> searchByTitle(String text);
 
-    // Consulta polimorfica: "type(b)" filtra por subclase. En SINGLE_TABLE se traduce a un filtro por la columna
-    // discriminadora "type". El parametro recibe la clase (PhysicalBook.class o DigitalBook.class).
-    @Query("select b from Book b where type(b) = :type")
-    List<Book> findByType(@Param("type") Class<? extends Book> type);
+    // Consulta polimorfica: filtra por el campo discriminador "_class" ("Physical" o "Digital").
+    @Query("{ '_class': ?0 }")
+    List<Book> findByTypeAlias(String typeAlias);
 
-    // Funcion de agregacion escalar: el resultado no es una entidad sino un unico valor.
-    @Query("select avg(b.year) from Book b where b.author.id = :authorId")
-    Double averageYearByAuthor(@Param("authorId") Long authorId);
+    // Filtrar por un campo del autor: el documento book solo tiene el _id del autor, asi que hace falta
+    // un $lookup para traer el autor y poder comparar su nombre (equivale a b.author.fullname en JPQL).
+    @Aggregation(pipeline = {
+            "{ $lookup: { from: 'author', localField: 'author', foreignField: '_id', as: 'authorDoc' } }",
+            "{ $match: { 'authorDoc.fullname': ?0 } }",
+            "{ $unset: 'authorDoc' }"
+    })
+    List<Book> findByAuthorFullname(String fullname);
 
-    // Operacion masiva (bulk update) con @Modifying: se ejecuta directo en la base, sin pasar por las entidades
-    // en memoria. flushAutomatically: envia los cambios pendientes antes; clearAutomatically: limpia el contexto de
-    // persistencia despues, para que las entidades ya cargadas no queden desactualizadas respecto de la base.
-    @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("update Book b set b.comments = :comments where b.isbn = :isbn")
-    int updateComments(@Param("isbn") String isbn, @Param("comments") String comments);
-
-    // Consulta SQL nativa (no JPQL): se escribe contra las tablas y columnas reales, no contra las entidades.
-    // Hibernate igualmente mapea las filas a la entidad (usando la columna discriminadora para elegir la subclase).
-    @Query(value = "select * from book where isbn = :isbn", nativeQuery = true)
-    Optional<Book> findByIsbnNative(@Param("isbn") String isbn);
-
+    // Agregacion escalar: $group sobre todos los libros del autor y $avg. Devuelve null si no tiene libros.
+    // En un pipeline los parametros se insertan tal cual: el campo "author" guarda un ObjectId, asi que hay que
+    // pasar el id ya convertido (en las consultas derivadas, como findByAuthor, Spring Data lo convierte solo).
+    @Aggregation(pipeline = {
+            "{ $match: { 'author': ?0 } }",
+            "{ $group: { _id: null, averageYear: { $avg: '$year' } } }"
+    })
+    Double averageYearByAuthor(ObjectId authorId);
 }

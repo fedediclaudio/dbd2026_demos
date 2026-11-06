@@ -12,15 +12,15 @@ public interface AuthorService {
 
     Author createAuthor(String fullname, LocalDate dateOfBirth) throws LibraryException;
 
-    Author updateAuthor(Long id, String fullname, LocalDate dateOfBirth) throws LibraryException;
+    Author updateAuthor(String id, String fullname, LocalDate dateOfBirth) throws LibraryException;
 
     Author updateAuthor(Author author) throws LibraryException;
 
-    boolean deleteAuthor(Long id) throws LibraryException;
+    boolean deleteAuthor(String id) throws LibraryException;
 
-    Optional<Author> getById(Long id);
+    Optional<Author> getById(String id);
 
-    Optional<Author> getByIdWithBooks(Long id);
+    Optional<Author> getByIdWithBooks(String id);
 
     List<Author> getListOfAuthors();
 
