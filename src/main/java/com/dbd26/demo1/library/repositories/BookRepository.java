@@ -11,12 +11,8 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
-/*
- Ademas de los metodos generados por Spring Data, este repositorio extiende BookRepositoryCustom: un "fragmento"
- con una implementacion escrita a mano sobre MongoTemplate (ver BookRepositoryImpl).
- */
 @Repository
-public interface BookRepository extends MongoRepository<Book, String>, BookRepositoryCustom {
+public interface BookRepository extends MongoRepository<Book, String> {
 
     // Consulta derivada: { isbn: ?0 }
     Optional<Book> findByIsbn(String isbn);

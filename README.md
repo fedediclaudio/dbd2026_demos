@@ -72,6 +72,7 @@ Un test puntual:
 | Clave foránea | **No existe.** El servicio impide borrar un autor con libros |
 | `@Version` (bloqueo optimista) | Igual, con `Integer` en lugar de `int` |
 | `@Transactional` | Se quita: atomicidad por documento. Transacciones multi-documento requieren replica set |
+| Dirty checking | No existe: todo cambio se guarda con `save()` explícito (ver `updateComments`) |
 | `ddl-auto=create` | No hay esquema. La suite vacía la base en `@BeforeAll` |
 
 ## Consultas de ejemplo en los repositorios
@@ -89,7 +90,6 @@ Un test puntual:
 | `BookRepository` | `findByAuthor` | Consulta derivada sobre una referencia |
 | `BookRepository` | `findByAuthorFullname` | `$lookup` hacia `author` para filtrar por un campo del autor |
 | `BookRepository` | `averageYearByAuthor` | `$group` + `$avg`, resultado escalar |
-| `BookRepositoryImpl` | `updateComments` | Fragmento a mano con `MongoTemplate`: `updateFirst` + `$set` |
 | `DigitalBookRepository` | `findAllDigital`, `findByFormatIgnoreCase` | Repositorio de subclase: el filtro por `_class` hay que escribirlo |
 
 ## Tests

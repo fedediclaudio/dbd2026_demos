@@ -116,7 +116,15 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public boolean updateComments(String isbn, String comments) {
-        return this.bookRepository.updateComments(isbn, comments) == 1;
+        // Sin contexto de persistencia ni "dirty checking": se lee el documento, se modifica y se vuelve a guardar.
+        // (MongoDB tambien permite modificar sin leer, con updateOne y $set, pero eso requiere MongoTemplate.)
+        Optional<Book> bookOptional = this.bookRepository.findByIsbn(isbn);
+        if (bookOptional.isPresent()) {
+            Book book = bookOptional.get();
+            book.setComments(comments);
+            this.bookRepository.save(book);
+            return true;
+        } else return false;
     }
 
     @Override
