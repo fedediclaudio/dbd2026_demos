@@ -11,17 +11,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/*
- @Document: la clase se guarda como documentos BSON en la coleccion "author" (equivale a @Entity + @Table).
- No hay esquema: cada documento tiene los campos que tenga el objeto al guardarlo.
- */
+// @Document: equivale a @Entity + @Table. No hay esquema: cada documento tiene los campos del objeto guardado.
 @Document(collection = "author")
 public class Author {
 
-    /*
-     Clave del documento (campo "_id"). Si se deja en null, MongoDB genera un ObjectId (12 bytes: fecha, maquina,
-     contador), que Spring Data representa como String hexadecimal de 24 caracteres.
-     */
+    // Campo "_id". Si es null, MongoDB genera un ObjectId, que Spring Data representa como String de 24 hexadecimales.
     @Id
     private String id;
 
@@ -31,21 +25,12 @@ public class Author {
     @Field("date_of_birth")
     private LocalDate dateOfBirth;
 
-    /*
-     Lado "inverso" de la relacion, equivalente al mappedBy de JPA: esta lista NO se guarda en el documento
-     (@ReadOnlyProperty). Al leer un autor, Spring Data la resuelve con la consulta del "lookup":
-     busca en la coleccion book los documentos cuyo campo "author" sea el id de este autor.
-     lazy = true: esa consulta se ejecuta recien cuando se accede a la lista (misma idea que FetchType.LAZY).
-     */
+    // Lado inverso (mappedBy): no se guarda, se resuelve con el lookup sobre book al acceder a la lista (lazy).
     @ReadOnlyProperty
     @DocumentReference(lookup = "{ 'author': ?#{#self._id} }", lazy = true)
     private List<Book> books = new ArrayList<>();
 
-    /*
-     Bloqueo optimista: Spring Data incrementa "version" en cada save() y falla (OptimisticLockingFailureException)
-     si el documento fue modificado entre la lectura y la escritura. Debe ser un tipo envoltorio (Integer, no int):
-     Spring Data usa "version == null" para saber si el objeto es nuevo (insert) o existente (update).
-     */
+    // Bloqueo optimista. Integer y no int: version == null indica objeto nuevo (insert).
     @Version
     private Integer version;
 

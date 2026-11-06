@@ -3,8 +3,7 @@ package com.dbd26.demo1.library.model;
 import org.springframework.data.annotation.TypeAlias;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-// @TypeAlias: valor que se guarda en el campo "_class" del documento (equivale a @DiscriminatorValue).
-// Sin esta anotacion Spring Data guardaria el nombre completo de la clase.
+// @TypeAlias: valor de "_class" (equivale a @DiscriminatorValue). Sin ella se guarda el nombre completo de la clase.
 @Document(collection = "book")
 @TypeAlias("Physical")
 public class PhysicalBook extends Book {

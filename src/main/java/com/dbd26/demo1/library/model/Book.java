@@ -8,22 +8,15 @@ import org.springframework.data.mongodb.core.mapping.DocumentReference;
 
 import java.util.List;
 
-/*
- Herencia en MongoDB: no hay tablas, asi que no hay SINGLE_TABLE ni JOINED. Todas las subclases se guardan en la
- misma coleccion "book" y Spring Data agrega a cada documento el campo "_class" con el alias de la subclase
- ("Physical" o "Digital", ver @TypeAlias en PhysicalBook y DigitalBook). Es el equivalente de la columna
- discriminadora: al leer, Spring Data mira "_class" para saber que subclase instanciar.
- Cada documento tiene solo los campos de su subclase: un libro fisico no tiene "format" ni "size" en null,
- directamente no tiene esos campos.
- */
+// Herencia: todas las subclases van a la coleccion "book" y el campo "_class" (ver @TypeAlias) hace de discriminador.
+// Cada documento tiene solo los campos de su subclase.
 @Document(collection = "book")
 public abstract class Book {
 
     @Id
     private String id;
 
-    // Indice unico sobre isbn: es la unica "restriccion" que MongoDB puede imponer (ademas de la clave).
-    // Se crea al arrancar gracias a spring.data.mongodb.auto-index-creation=true.
+    // Indice unico: la unica restriccion que MongoDB impone ademas de la clave. Se crea al arrancar (auto-index-creation).
     @Indexed(unique = true)
     private String isbn;
 
@@ -33,13 +26,8 @@ public abstract class Book {
 
     private String comments;
 
-    /*
-     Lado propietario de la relacion: el documento guarda en el campo "author" solo el _id del autor
-     (equivale a la FK id_author). Al leer un libro, Spring Data hace una segunda consulta para traer el autor.
-     Alternativa tipica en MongoDB: embeber una copia del autor dentro del libro (desnormalizar), que evita la
-     segunda consulta pero duplica datos.
-     MongoDB NO valida la referencia: nada impide borrar un autor que tiene libros (no hay claves foraneas).
-     */
+    // Lado propietario: guarda solo el _id del autor (como la FK id_author), sin validacion de claves foraneas.
+    // La alternativa tipica en MongoDB es embeber una copia del autor en el libro.
     @DocumentReference
     @Indexed
     private Author author;
