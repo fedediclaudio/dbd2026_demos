@@ -17,28 +17,26 @@ public interface BookRepository extends MongoRepository<Book, String> {
     // Consulta derivada: { isbn: ?0 }
     Optional<Book> findByIsbn(String isbn);
 
-    // Consulta derivada sobre la referencia: Spring Data compara el campo "author" con el _id del autor recibido.
+    // Consulta derivada sobre la referencia: compara el campo "author" con el _id del autor.
     List<Book> findByAuthor(Author author);
 
-    // @Query con el filtro JSON "nativo" de MongoDB: es lo mismo que se escribiria en mongosh en db.book.find(...).
-    // Equivale a la consulta SQL nativa de las otras ramas.
+    // @Query con el filtro JSON de MongoDB, igual que en mongosh: db.book.find({ isbn: ... }).
     @Query("{ 'isbn': ?0 }")
     Optional<Book> findByIsbnNative(String isbn);
 
-    // Rango con $gte / $lte y orden. (El "Between" derivado de Spring Data MongoDB es exclusivo, por eso @Query.)
+    // Rango inclusivo con orden (el Between derivado es exclusivo).
     @Query(value = "{ 'year': { $gte: ?0, $lte: ?1 } }", sort = "{ 'year': 1, 'title': 1 }")
     List<Book> findByYearBetween(int from, int to);
 
-    // Busqueda parcial con expresion regular insensible a mayusculas (equivale a like + lower).
+    // Busqueda parcial, insensible a mayusculas (equivale a like + lower).
     @Query("{ 'title': { $regex: ?0, $options: 'i' } }")
     List<Book> searchByTitle(String text);
 
-    // Consulta polimorfica: filtra por el campo discriminador "_class" ("Physical" o "Digital").
+    // Consulta polimorfica: filtra por el discriminador "_class".
     @Query("{ '_class': ?0 }")
     List<Book> findByTypeAlias(String typeAlias);
 
-    // Filtrar por un campo del autor: el documento book solo tiene el _id del autor, asi que hace falta
-    // un $lookup para traer el autor y poder comparar su nombre (equivale a b.author.fullname en JPQL).
+    // Filtrar por un campo del autor requiere $lookup: el libro solo guarda su _id.
     @Aggregation(pipeline = {
             "{ $lookup: { from: 'author', localField: 'author', foreignField: '_id', as: 'authorDoc' } }",
             "{ $match: { 'authorDoc.fullname': ?0 } }",
@@ -46,9 +44,8 @@ public interface BookRepository extends MongoRepository<Book, String> {
     })
     List<Book> findByAuthorFullname(String fullname);
 
-    // Agregacion escalar: $group sobre todos los libros del autor y $avg. Devuelve null si no tiene libros.
-    // En un pipeline los parametros se insertan tal cual: el campo "author" guarda un ObjectId, asi que hay que
-    // pasar el id ya convertido (en las consultas derivadas, como findByAuthor, Spring Data lo convierte solo).
+    // Agregacion escalar con $avg. Devuelve null si el autor no tiene libros.
+    // En un pipeline el parametro se inserta tal cual, por eso se recibe el ObjectId y no el Author.
     @Aggregation(pipeline = {
             "{ $match: { 'author': ?0 } }",
             "{ $group: { _id: null, averageYear: { $avg: '$year' } } }"

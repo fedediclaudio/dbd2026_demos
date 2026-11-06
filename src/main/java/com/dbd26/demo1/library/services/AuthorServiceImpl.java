@@ -12,12 +12,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-/*
- Sin @Transactional: MongoDB garantiza atomicidad por documento, no hay transacciones entre varias operaciones
- salvo que se configure un replica set y un MongoTransactionManager. Cada save() o delete() impacta en la base
- en el momento. Tampoco hay contexto de persistencia ni "dirty checking": para guardar un cambio hay que
- llamar a save() explicitamente.
- */
+// Sin @Transactional ni dirty checking: cada save() o delete() impacta en la base en el momento.
 @Service
 public class AuthorServiceImpl implements AuthorService {
 
@@ -32,7 +27,7 @@ public class AuthorServiceImpl implements AuthorService {
         if (fullname == null || fullname.isBlank()) {
             throw new LibraryException("El nombre del autor es obligatorio");
         }
-        // save() de un objeto sin id (y con version null) hace un insert y completa el id generado.
+        // save() sin id hace un insert y completa el id generado.
         return this.authorRepository.save(new Author(fullname, dateOfBirth));
     }
 
@@ -43,7 +38,7 @@ public class AuthorServiceImpl implements AuthorService {
             Author author = authorOptional.get();
             author.setFullname(fullname);
             author.setDateOfBirth(dateOfBirth);
-            // A diferencia de JPA, el cambio no se persiste solo: hay que guardar explicitamente.
+            // El cambio no se persiste solo: hay que llamar a save().
             return this.authorRepository.save(author);
         } else return null;
     }
@@ -53,8 +48,7 @@ public class AuthorServiceImpl implements AuthorService {
         if (author.getId() == null || !this.authorRepository.existsById(author.getId())) {
             throw new LibraryException("No existe el autor con id " + author.getId());
         }
-        // save() de un objeto con id y version: update con filtro { _id, version }. Si la version recibida
-        // es vieja no coincide ningun documento y Spring Data lanza OptimisticLockingFailureException.
+        // save() con id y version: update con filtro { _id, version }. Version vieja => OptimisticLockingFailureException.
         return this.authorRepository.save(author);
     }
 
@@ -63,9 +57,7 @@ public class AuthorServiceImpl implements AuthorService {
         Optional<Author> authorOptional = this.authorRepository.findById(id);
         if (authorOptional.isPresent()) {
             Author author = authorOptional.get();
-            // MongoDB no tiene claves foraneas: si no se controla aca, el autor se borra y sus libros quedan
-            // con una referencia a un documento que ya no existe. La integridad referencial es responsabilidad
-            // de la aplicacion.
+            // Sin claves foraneas: la integridad referencial la controla la aplicacion.
             if (!this.bookRepository.findByAuthor(author).isEmpty()) {
                 throw new LibraryException("No se puede eliminar el autor " + author.getFullname() + " porque tiene libros");
             }
@@ -81,8 +73,7 @@ public class AuthorServiceImpl implements AuthorService {
 
     @Override
     public Optional<Author> getByIdWithBooks(String id) {
-        // No hay "join fetch": al acceder a getBooks() Spring Data ejecuta la consulta del lookup declarado
-        // en Author.books (una segunda consulta, igual que una coleccion LAZY).
+        // No hay join fetch: getBooks() dispara el lookup declarado en Author.books (segunda consulta).
         Optional<Author> author = this.authorRepository.findById(id);
         author.ifPresent(a -> a.getBooks().size());
         return author;

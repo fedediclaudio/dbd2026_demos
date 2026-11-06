@@ -7,10 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-/*
- Repositorio sobre una subclase. Comparte la coleccion "book" con PhysicalBook, asi que las consultas deben
- filtrar por "_class" explicitamente: a diferencia de Hibernate, Spring Data MongoDB no agrega el discriminador solo.
- */
+// Comparte la coleccion "book" con PhysicalBook: hay que filtrar por "_class" a mano, Spring Data no lo agrega.
 @Repository
 public interface DigitalBookRepository extends MongoRepository<DigitalBook, String> {
 

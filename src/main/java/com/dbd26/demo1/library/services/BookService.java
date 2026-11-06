@@ -11,7 +11,6 @@ import java.util.Optional;
 
 public interface BookService {
 
-    /** Guarda un libro (fisico o digital) ya construido. El autor se resuelve por su id. */
     Book createBook(Book book) throws LibraryException;
 
     PhysicalBook createPhysicalBook(String isbn, String title, int year, String comments, float weight, String location, Author author) throws LibraryException;

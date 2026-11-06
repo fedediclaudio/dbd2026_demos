@@ -36,13 +36,12 @@ public class BookServiceImpl implements BookService {
         String authorId = book.getAuthor().getId();
         Author author = this.authorRepository.findById(authorId)
                 .orElseThrow(() -> new LibraryException("No existe el autor con id " + authorId));
-        // Se valida antes de insertar para dar un mensaje claro; si no, el indice unico sobre isbn
-        // haria fallar el insert con una DuplicateKeyException.
+        // Si no se valida aca, el indice unico sobre isbn lanza DuplicateKeyException.
         if (this.bookRepository.findByIsbn(book.getIsbn()).isPresent()) {
             throw new LibraryException("Ya existe un libro con ISBN " + book.getIsbn());
         }
         book.setAuthor(author);
-        // No hay que mantener author.getBooks(): esa lista no se guarda, se calcula al leer (ver Author.books).
+        // author.getBooks() no se guarda: se calcula al leer (ver Author.books).
         return this.bookRepository.save(book);
     }
 
@@ -110,14 +109,13 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public Double getAverageYearByAuthor(Author author) {
-        // El id String de Java (24 caracteres hexadecimales) se convierte al ObjectId que guarda MongoDB.
+        // El id String se convierte al ObjectId que guarda MongoDB.
         return this.bookRepository.averageYearByAuthor(new ObjectId(author.getId()));
     }
 
     @Override
     public boolean updateComments(String isbn, String comments) {
-        // Sin contexto de persistencia ni "dirty checking": se lee el documento, se modifica y se vuelve a guardar.
-        // (MongoDB tambien permite modificar sin leer, con updateOne y $set, pero eso requiere MongoTemplate.)
+        // Sin dirty checking: leer, modificar y volver a guardar.
         Optional<Book> bookOptional = this.bookRepository.findByIsbn(isbn);
         if (bookOptional.isPresent()) {
             Book book = bookOptional.get();

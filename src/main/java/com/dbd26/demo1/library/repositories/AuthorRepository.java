@@ -9,22 +9,17 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.List;
 
-/*
- MongoRepository: igual que JpaRepository, Spring Data genera la implementacion. Cambia el lenguaje de consulta:
- en lugar de JPQL, filtros JSON de MongoDB (@Query) y pipelines de agregacion (@Aggregation).
- */
+// MongoRepository: como JpaRepository, pero las consultas son filtros JSON (@Query) o pipelines (@Aggregation).
 @Repository
 public interface AuthorRepository extends MongoRepository<Author, String> {
 
-    // Consulta derivada: Spring Data la traduce a { date_of_birth: { $gt: <fecha> } }
+    // Consulta derivada: { date_of_birth: { $gt: ?0 } }
     List<Author> findByDateOfBirthGreaterThan(LocalDate date);
 
-    // Consulta derivada: se traduce a una expresion regular insensible a mayusculas { fullname: /texto/i }
+    // Consulta derivada: { fullname: /texto/i }
     List<Author> findByFullnameContainingIgnoreCase(String text);
 
-    // Agregacion: no hay "join" en una consulta comun, pero el pipeline tiene $lookup, que trae los documentos
-    // de otra coleccion. Aca se cuentan los libros de cada autor, se filtran los que tienen alguno y se ordenan.
-    // $unset quita los campos auxiliares para que el documento resultante se mapee a Author sin problemas.
+    // No hay join: $lookup trae los libros de cada autor. $unset quita los campos auxiliares antes de mapear a Author.
     @Aggregation(pipeline = {
             "{ $lookup: { from: 'book', localField: '_id', foreignField: 'author', as: 'bookDocs' } }",
             "{ $addFields: { bookCount: { $size: '$bookDocs' } } }",
@@ -34,7 +29,7 @@ public interface AuthorRepository extends MongoRepository<Author, String> {
     })
     List<Author> findByMoreBooks();
 
-    // Autores sin libros: $lookup y luego filtrar los que quedaron con el arreglo vacio.
+    // Autores sin libros: el arreglo del $lookup queda vacio.
     @Aggregation(pipeline = {
             "{ $lookup: { from: 'book', localField: '_id', foreignField: 'author', as: 'bookDocs' } }",
             "{ $match: { bookDocs: { $size: 0 } } }",
@@ -43,7 +38,6 @@ public interface AuthorRepository extends MongoRepository<Author, String> {
     List<Author> findWithoutBooks();
 
     // Proyeccion a un DTO: $project arma un documento con la forma del record AuthorBookCount.
-    // $toString y $toLong convierten los tipos BSON a los de los componentes del record.
     @Aggregation(pipeline = {
             "{ $lookup: { from: 'book', localField: '_id', foreignField: 'author', as: 'bookDocs' } }",
             "{ $project: { _id: 0, id: { $toString: '$_id' }, fullname: 1, books: { $toLong: { $size: '$bookDocs' } } } }",
